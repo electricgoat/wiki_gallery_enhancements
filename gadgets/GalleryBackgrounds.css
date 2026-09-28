@@ -1,0 +1,109 @@
+/**
+ * Gallery backgrounds, see GalleryBackgrounds.js
+ */
+
+/* Faint background behind gallery thumbnails */
+.gallery-bg .gallerybox > .thumb {
+	position: relative;
+	/* Own stacking context: the layer goes under the image but over the box's own background */
+	isolation: isolate;
+}
+
+.gallery-bg-thumb {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: -1;
+	border-radius: inherit;
+	background: var( --gallery-bg-image ) center / cover no-repeat;
+	opacity: 0.2;
+	pointer-events: none;
+}
+
+/* Media Viewer: background behind the full-size image */
+.gallery-bg-viewer {
+	display: none;
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	/* .mw-mmv-image-wrapper is position: fixed, so this stays inside it, under the image */
+	z-index: -1;
+	background: center / cover no-repeat;
+	opacity: 0;
+	transition: opacity 0.2s;
+	pointer-events: none;
+}
+
+.gallery-bg-viewer-on .gallery-bg-viewer {
+	display: block;
+}
+
+.gallery-bg-viewer.gallery-bg-loaded {
+	opacity: 1;
+}
+
+/* Show the background through transparent areas instead of the checkerboard */
+.gallery-bg-viewer-on .mw-mmv-image-wrapper .mw-mmv-image img {
+	background: none;
+}
+
+/* Toggle button, left of "More details" (which has a 10px margin on each side) */
+.gallery-bg-toggle.mw-mmv-stripe-button {
+	margin: 7px 0 7px 10px;
+}
+
+.gallery-bg-toggle.gallery-bg-toggle-hidden {
+	display: none;
+}
+
+/* Codex "image" icon, coloured by the button's own .cdx-button__icon rules */
+.gallery-bg-toggle .cdx-button__icon {
+	display: inline-block;
+	width: calc( var( --font-size-medium, 1rem ) + 4px );
+	height: calc( var( --font-size-medium, 1rem ) + 4px );
+	-webkit-mask: url( "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M2 2a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2zm-.17 13 4.09-5.25 2.92 3.51L12.92 8l5.25 7z'/%3E%3C/svg%3E" ) center / contain no-repeat;
+	mask: url( "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M2 2a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2zm-.17 13 4.09-5.25 2.92 3.51L12.92 8l5.25 7z'/%3E%3C/svg%3E" ) center / contain no-repeat;
+}
+
+/* Citizen shrinks "More details" to a regular-size button, translucent while the panel is collapsed */
+.skin-citizen .gallery-bg-toggle.mw-mmv-stripe-button {
+	min-height: 32px;
+	margin: 0 8px 0 0;
+	padding-inline: 11px;
+}
+
+.skin-citizen .mw-mmv-post-image:not( .mw-mmv-untruncated ) .gallery-bg-toggle.cdx-button:not( .cdx-button--action-progressive ) {
+	background-color: transparent;
+	border-color: rgba( 255, 255, 255, 0.11 );
+	color: #fff;
+}
+
+.skin-citizen .mw-mmv-post-image:not( .mw-mmv-untruncated ) .gallery-bg-toggle.cdx-button:not( .cdx-button--action-progressive ):hover {
+	background-color: var( --background-color-button-quiet--hover );
+}
+
+.skin-citizen .mw-mmv-post-image:not( .mw-mmv-untruncated ) .gallery-bg-toggle.cdx-button:not( .cdx-button--action-progressive ) .cdx-button__icon {
+	background-color: #fff;
+}
+
+/* Icon only on narrow screens; the label stays available to screen readers */
+@media ( max-width: 499px ) {
+	.gallery-bg-toggle-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect( 0, 0, 0, 0 );
+		white-space: nowrap;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.gallery-bg-viewer {
+		transition: none;
+	}
+}
