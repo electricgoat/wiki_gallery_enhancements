@@ -17,7 +17,9 @@
  * li.gallerybox items overrides the gallery's for that image; an empty one removes it.
  *
  * Sprites (images with a background, or in a gallery with the "spritegallery" class) keep
- * a small margin from the edges of the viewer, where other images fill it.
+ * a small margin from the edges of the viewer, where other images fill it. They all get
+ * the toggle: sprites without a background image toggle Media Viewer's transparency
+ * checkerboard instead.
  */
 mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).then( ( require ) => {
 	'use strict';
@@ -42,8 +44,9 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	const stored = mw.storage.get( STORAGE_KEY );
 	let viewerOn = stored === '1' || ( stored !== '0' && VIEWER_DEFAULT );
 	let viewerPatched = false;
-	// What the viewer is showing: its injected elements, and the current image's background
-	const viewer = { ui: null, title: null, url: null };
+	// What the viewer is showing: its injected elements, whether the image is a sprite,
+	// and its background (url is undefined while being looked up, null if there is none)
+	const viewer = { ui: null, sprite: false, title: null, url: null };
 
 	/**
 	 * @param {string} url
@@ -156,9 +159,6 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 			layer.className = 'gallery-bg-thumb mw-no-invert';
 			thumb.insertBefore( layer, thumb.firstChild );
 		}
-		// Hook into the viewer before a click on this image opens it
-		box.addEventListener( 'pointerover', patchViewer, { once: true } );
-		box.addEventListener( 'focusin', patchViewer, { once: true } );
 	}
 
 	/**
@@ -230,12 +230,15 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 		if ( !ui ) {
 			return;
 		}
-		const show = viewerOn && !!viewer.url;
-		ui.button.classList.toggle( 'gallery-bg-toggle-hidden', !viewer.url );
+		const show = viewerOn && typeof viewer.url === 'string';
+		// A sprite's background is its background image, or the checkerboard if it has none
+		const hasImage = !!viewer.title && viewer.url !== null;
+		ui.button.classList.toggle( 'gallery-bg-toggle-hidden', !viewer.sprite );
 		ui.button.classList.toggle( 'cdx-button--action-progressive', viewerOn );
 		ui.button.setAttribute( 'aria-pressed', String( viewerOn ) );
 		ui.button.title = viewerOn ? MSG.hide : MSG.show;
 		ui.wrapper.classList.toggle( 'gallery-bg-viewer-on', show );
+		ui.wrapper.classList.toggle( 'gallery-bg-no-checker', viewer.sprite && ( !viewerOn || hasImage ) );
 
 		if ( show && ui.layerUrl !== viewer.url ) {
 			const url = viewer.url;
@@ -259,20 +262,22 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	 * @param {Object|null} image Media Viewer's LightboxImage, null when it closes
 	 */
 	function showInViewer( image ) {
-		const title = image && image.thumbnail ? getBgTitle( image.thumbnail ) : null;
-		// Leave the viewer untouched until there is a background to offer
-		if ( !title && !viewer.ui ) {
+		const sprite = isSprite( image );
+		// Leave the viewer untouched until it shows a sprite
+		if ( !sprite && !viewer.ui ) {
 			return;
 		}
 		getViewerUi();
+		viewer.sprite = sprite;
+		const title = sprite ? getBgTitle( image.thumbnail ) : null;
 		if ( title !== viewer.title ) {
 			viewer.title = title;
-			viewer.url = null;
+			viewer.url = title ? undefined : null;
 			if ( title ) {
 				// Already looked up for the gallery, unless the image is outside one
 				getImages( [ title ] ).then( ( images ) => {
 					if ( viewer.title === title ) {
-						viewer.url = images[ 0 ] && images[ 0 ].full;
+						viewer.url = images[ 0 ] ? images[ 0 ].full : null;
 						renderViewer();
 					}
 				} );
@@ -282,19 +287,18 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	}
 
 	/**
-	 * Hook Media Viewer:
-	 * - The method that opens an image, to switch backgrounds as soon as an image is opened.
-	 *   Media Viewer only reports an image once it and its details have loaded (mmv-metadata).
-	 * - The method that sizes images for the canvas, to keep sprites off its edges.
+	 * Hook Media Viewer's canvas:
+	 * - set() puts each new image on it: update the background there and then. (Media Viewer
+	 *   only reports an image once it and its details have loaded, with mmv-metadata.)
+	 * - getLightboxImageWidths() sizes images for it: keep sprites off its edges.
 	 *
-	 * @param {Object} mmv Exports of the mmv module
+	 * @param {Function} Canvas Media Viewer's Canvas class
 	 */
-	function patchModule( mmv ) {
-		const MultimediaViewer = mmv.MultimediaViewer;
-		const loadImage = MultimediaViewer && MultimediaViewer.prototype.loadImage;
-		if ( typeof loadImage === 'function' ) {
-			MultimediaViewer.prototype.loadImage = function ( image ) {
-				const result = loadImage.apply( this, arguments );
+	function patchCanvas( Canvas ) {
+		const set = Canvas.prototype.set;
+		if ( typeof set === 'function' ) {
+			Canvas.prototype.set = function ( image ) {
+				const result = set.apply( this, arguments );
 				try {
 					showInViewer( image );
 				} catch ( e ) {
@@ -304,8 +308,7 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 			};
 		}
 
-		const Canvas = mmv.Canvas;
-		const getWidths = Canvas && Canvas.prototype.getLightboxImageWidths;
+		const getWidths = Canvas.prototype.getLightboxImageWidths;
 		if ( typeof getWidths === 'function' ) {
 			Canvas.prototype.getLightboxImageWidths = function ( image ) {
 				const calculator = this.thumbnailWidthCalculator;
@@ -324,17 +327,17 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 		}
 	}
 
+	/**
+	 * Called as the viewer opens (mmv-setup-overlay), before it sizes and shows the first image.
+	 */
 	function patchViewer() {
-		if ( viewerPatched || !mw.loader.getState( 'mmv' ) || !document.querySelector( '[data-bg], ul.gallery.spritegallery' ) ) {
+		if ( viewerPatched || mw.loader.getState( 'mmv' ) !== 'ready' || !document.querySelector( '[data-bg], ul.gallery.spritegallery' ) ) {
 			return;
 		}
 		viewerPatched = true;
-		if ( mw.loader.getState( 'mmv' ) === 'ready' ) {
-			// Right away when the viewer is opening (mmv-setup-overlay), so the image
-			// it is opening is sized with the patch too
-			patchModule( require( 'mmv' ) );
-		} else {
-			mw.loader.using( 'mmv' ).then( ( req ) => patchModule( req( 'mmv' ) ) );
+		const Canvas = require( 'mmv' ).Canvas;
+		if ( Canvas ) {
+			patchCanvas( Canvas );
 		}
 	}
 

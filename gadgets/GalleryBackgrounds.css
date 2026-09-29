@@ -22,6 +22,29 @@
 	pointer-events: none;
 }
 
+/* Media Viewer's backdrop, for every image: a dark grey rather than pure black,
+   except in Citizen's pure black theme */
+:root {
+	--gallery-bg-viewer-backdrop: #1a1a1a;
+}
+
+.skin-theme-clientpref-night.citizen-feature-pure-black-clientpref-1 {
+	--gallery-bg-viewer-backdrop: #000;
+}
+
+@media ( prefers-color-scheme: dark ) {
+	.skin-theme-clientpref-os.citizen-feature-pure-black-clientpref-1 {
+		--gallery-bg-viewer-backdrop: #000;
+	}
+}
+
+/* One step more specific than Media Viewer's own rules, whichever loads last */
+body > .mw-mmv-overlay,
+html body.mw-mmv-lightbox-open,
+.mw-mmv-wrapper .mw-mmv-main.jq-fullscreened {
+	background-color: var( --gallery-bg-viewer-backdrop );
+}
+
 /* Media Viewer: background behind the full-size image */
 .gallery-bg-viewer {
 	/* How much the background blurs while the mouse is over the image */
@@ -69,8 +92,9 @@
 	}
 }
 
-/* Show the background through transparent areas instead of the checkerboard */
-.gallery-bg-viewer-on .mw-mmv-image-wrapper .mw-mmv-image img {
+/* Hide Media Viewer's transparency checkerboard: behind sprites with a background image,
+   and behind every sprite while the Background toggle is off */
+.gallery-bg-no-checker .mw-mmv-image-wrapper .mw-mmv-image img {
 	background: none;
 }
 

@@ -2,6 +2,8 @@
 
 Gadgets that extend MediaWiki galleries and Media Viewer on [Blue Archive Wiki](https://bluearchive.wiki).
 
+They work wherever Media Viewer does, in every skin including Minerva used as a desktop skin. MobileFrontend's mobile view has its own image viewer, which isn't supported, because MobileFrontend is to be removed after the move to Citizen. In mobile view, only the gallery thumbnail backgrounds appear.
+
 ## Gallery backgrounds
 
 [gadgets/GalleryBackgrounds.js](gadgets/GalleryBackgrounds.js) and [gadgets/GalleryBackgrounds.css](gadgets/GalleryBackgrounds.css)
@@ -9,9 +11,13 @@ Gadgets that extend MediaWiki galleries and Media Viewer on [Blue Archive Wiki](
 Shows sprites against the background they are meant to be seen on:
 
 - Gallery thumbnails get a faint (20% opacity) copy of the background behind them.
-- Media Viewer gets a **Background** toggle, left of **More details**, that puts the full background behind the image. It is off until a reader turns it on, and the choice is remembered in the browser. The toggle only appears for images that have a background.
+- An image counts as a sprite if it has a background, or if its gallery has the `spritegallery` class. For sprites, Media Viewer gets a **Background** toggle, left of **More details**.
+  - On, it shows the sprite's background. That's the full background image if it has one, otherwise Media Viewer's transparency checkerboard.
+  - Off, the sprite sits on the viewer's plain dark canvas, with no checkerboard.
+  - It is off until a reader turns it on, and the one choice applies to all sprites and is remembered in the browser. Other images keep their usual look and get no toggle.
 - While the mouse is over the image, the viewer background blurs with a slow (0.8s) transition, which brings the sprite forward. This is plain CSS and only applies on devices with a mouse.
-- Sprites keep an 8px margin from the edges of the viewer, where other images fill it. An image counts as a sprite if it has a background, or if its gallery has the `spritegallery` class. The margin applies whether or not the background is showing, so the sprite doesn't change size when you toggle it.
+- Sprites keep an 8px margin from the edges of the viewer, where other images fill it. The margin applies whether or not the background is showing, so the sprite doesn't change size when you toggle it.
+- Media Viewer's backdrop is a dark grey (`#1a1a1a`) instead of black, for every image, sprite or not. Citizen's pure black theme keeps black.
 
 ### Wikitext
 
@@ -34,7 +40,7 @@ For a single image, put it on the image's `li.gallerybox`. It overrides the gall
 
 - The `File:` prefix is optional, and spaces or underscores both work. File redirects are followed.
 - Use the 1024×768 collection backgrounds (`BG_…_Collection.png`). The viewer shows the original file, and some `BG_` scene files are as large as 6150px / 3.6 MB.
-- To give a sprite gallery without a background the margin, add the class: `<gallery class="spritegallery">`. A template that builds the markup itself can put it on the `ul.gallery`.
+- To make a gallery without a background image count as sprites, add the class: `<gallery class="spritegallery">`. A template that builds the markup itself can put it on the `ul.gallery`, as `{{SpriteGallery}}` does. Its sprites get the margin, and the toggle switches the checkerboard.
 
 The gadget looks up every background on the page in one API request, which returns a 320px version for the gallery thumbnails and the original for the viewer. The attribute takes a file name rather than `{{filepath:}}` because MediaWiki doesn't expand templates in `<gallery>` attributes.
 
@@ -70,15 +76,17 @@ At the top of the JS:
 In the CSS:
 
 - The thumbnail opacity is on `.gallery-bg-thumb`.
+- The viewer backdrop colour is `--gallery-bg-viewer-backdrop` on `:root`. It is set to `#000` for Citizen's pure black theme, whether chosen directly or through the automatic theme in system dark mode.
 - The blur radius is `--gallery-bg-blur` on `.gallery-bg-viewer`.
 - The blur's transition time is on `.gallery-bg-viewer::before`.
 
 ### Media Viewer internals it relies on
 
 - The `mmv-metadata`, `mmv-setup-overlay` and `mmv-cleanup-overlay` document events. `mmv-metadata` also fires for an image whose details arrive after another image was opened, so the gadget only acts on it for the viewer's current image.
-- A wrapper around `MultimediaViewer.prototype.loadImage`, so the background changes as soon as an image opens rather than after its details load. If a Media Viewer update removes the method, backgrounds still work, just a moment later.
+- A wrapper around `Canvas.prototype.set`, which puts each new image on the canvas. The background, checkerboard and toggle are set before the image appears, including the first image the viewer opens. If a Media Viewer update removes the method, the `mmv-metadata` event still updates them, just a moment later.
 - A wrapper around `Canvas.prototype.getLightboxImageWidths`, the one place Media Viewer sizes images for its canvas. For sprites, it fits the image to a canvas `SPRITE_MARGIN` smaller on each side. The placeholder, the final image, preloading, window resizes and fullscreen all go through it, so they stay consistent.
-- Both wrappers are only installed on pages with `data-bg` or a `spritegallery`. They go in when the viewer opens, before it sizes the first image.
+- Both wrappers are only installed on pages with `data-bg` or a `spritegallery`. They go in as the viewer opens (`mmv-setup-overlay`), before it sizes and shows the first image.
+- The checkerboard is Media Viewer's own `background: url(…/checker.png)` on PNG, GIF, WebP, SVG and TIFF images. The gadget only removes it (the `gallery-bg-no-checker` class), so it looks exactly as usual when shown.
 - The `.mw-mmv-image-wrapper` and `.mw-mmv-stripe-button-container` elements. The blur is a `:has( .mw-mmv-image img:hover )` rule on the image wrapper.
 
 Background layers carry `mw-no-invert`, so the DarkMode extension's inverted page shows them in their real colours. The toggle is styled to match **More details** in Vector, Vector 2022 and Citizen.
