@@ -3,7 +3,7 @@
  *
  * Shows sprites against the background they are meant to be seen on:
  *
- *   <gallery data-bg="BG_GehennaCampus_Night.jpg">
+ *   <gallery data-bg="BG Gehenna Collection.png">
  *   Kayoko_(New_Year)_00.png
  *   Kayoko_(New_Year)_01.png
  *   </gallery>
@@ -11,18 +11,21 @@
  * - Gallery thumbnails get a faint copy of the background behind them.
  * - Media Viewer gets a "Background" toggle, left of "More details", that puts the
  *   background behind the full-size image. The reader's choice is remembered.
+ *   The background blurs while the mouse is over the image (GalleryBackgrounds.css).
  *
- * data-bg takes a file name ("File:" optional) or an upload URL such as the output of
- * {{filepath:}}. It can also go on an element wrapping the gallery, and then applies to
- * every gallery and image inside that element.
+ * data-bg holds a file name ("File:" optional). A data-bg on one of the gallery's
+ * li.gallerybox items overrides the gallery's for that image; an empty one removes it.
+ *
+ * Sprites (images with a background, or in a gallery with the "spritegallery" class) keep
+ * a small margin from the edges of the viewer, where other images fill it.
  */
-mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).then( () => {
+mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).then( ( require ) => {
 	'use strict';
 
-	// Widths requested from the API: thumbnail backgrounds are small and faint,
-	// the viewer's fills the window (originals smaller than this are used as they are).
+	// Gallery thumbnails get a scaled-down background; the viewer uses the original
 	const THUMB_WIDTH = 320;
-	const VIEWER_WIDTH = 1920;
+	// Space kept between a sprite and the edges of the viewer, in pixels
+	const SPRITE_MARGIN = 8;
 	// Whether the viewer shows backgrounds for readers who have not used the toggle yet
 	const VIEWER_DEFAULT = false;
 	const STORAGE_KEY = 'gallery-bg-viewer';
@@ -33,10 +36,8 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	};
 
 	const api = new mw.Api();
-	// "width|File:Title" -> Promise of the image URL, or null if there is no such file
-	const urlCache = new Map();
-	// Every background title seen on the page, so the viewer can fetch them in one request
-	const pageTitles = new Set();
+	// "File:Title" -> Promise of { thumb, full } URLs, or null if there is no such file
+	const imageCache = new Map();
 
 	const stored = mw.storage.get( STORAGE_KEY );
 	let viewerOn = stored === '1' || ( stored !== '0' && VIEWER_DEFAULT );
@@ -53,33 +54,33 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	}
 
 	/**
-	 * Find the background file for an element from the nearest data-bg attribute.
+	 * Find the background file for an element from the nearest data-bg attribute:
+	 * the gallery box's own if it has one, otherwise the gallery's.
 	 *
 	 * @param {Element} el
-	 * @return {string|null} Prefixed title, e.g. "File:BG GehennaCampus Night.jpg"
+	 * @return {string|null} Prefixed title, e.g. "File:BG Gehenna Collection.png"
 	 */
 	function getBgTitle( el ) {
 		const source = el.closest( '[data-bg]' );
-		let value = source ? source.getAttribute( 'data-bg' ).trim() : '';
-		if ( /^(https?:)?\/\//i.test( value ) ) {
-			// Upload URL: .../6/6c/Name.jpg, or .../thumb/6/6c/Name.jpg/320px-Name.jpg
-			try {
-				const parts = new URL( value, location.href ).pathname.split( '/' );
-				value = decodeURIComponent( parts[ parts.length - ( parts.includes( 'thumb' ) ? 2 : 1 ) ] );
-			} catch ( e ) {
-				return null;
-			}
-		}
-		const title = value ? mw.Title.newFromText( value, 6 ) : null;
+		const title = source && mw.Title.newFromText( source.getAttribute( 'data-bg' ).trim(), 6 );
 		return title && title.getNamespaceId() === 6 ? title.getPrefixedText() : null;
+	}
+
+	/**
+	 * @param {Object} image Media Viewer's LightboxImage
+	 * @return {boolean} Whether the image is a sprite: it has a background, or its gallery is a sprite gallery
+	 */
+	function isSprite( image ) {
+		const el = image && image.thumbnail;
+		return !!el && ( !!el.closest( 'ul.gallery.spritegallery' ) || !!getBgTitle( el ) );
 	}
 
 	/**
 	 * @param {Object} data API response
 	 * @param {string[]} titles Titles that were requested
-	 * @return {Object} Image URL (or null) for each requested title
+	 * @return {Object} { thumb, full } URLs (or null) for each requested title
 	 */
-	function urlsFromResponse( data, titles ) {
+	function imagesFromResponse( data, titles ) {
 		const query = data.query || {};
 		const renamed = {};
 		( query.normalized || [] ).concat( query.redirects || [] ).forEach( ( r ) => {
@@ -89,93 +90,93 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 		( query.pages || [] ).forEach( ( page ) => {
 			const info = page.imageinfo && page.imageinfo[ 0 ];
 			if ( info ) {
-				found[ page.title ] = info.thumburl || info.url;
+				found[ page.title ] = { thumb: info.thumburl || info.url, full: info.url };
 			}
 		} );
-		const urls = {};
+		const images = {};
 		titles.forEach( ( title ) => {
 			// At most a normalisation followed by a redirect
 			let target = title;
 			for ( let i = 0; i < 3 && renamed[ target ]; i++ ) {
 				target = renamed[ target ];
 			}
-			urls[ title ] = found[ target ] || null;
-			if ( !urls[ title ] ) {
+			images[ title ] = found[ target ] || null;
+			if ( !images[ title ] ) {
 				mw.log.warn( 'GalleryBackgrounds: no image found for ' + title );
 			}
 		} );
-		return urls;
+		return images;
 	}
 
 	/**
-	 * Look up image URLs at the given width, 50 titles per request, caching the answers.
+	 * Look up background files, 50 titles per request, caching the answers.
 	 *
 	 * @param {string[]} titles
-	 * @param {number} width
-	 * @return {Promise<Array<string|null>>} URL for each title, in the same order
+	 * @return {Promise<Array<Object|null>>} { thumb, full } URLs for each title, in the same order
 	 */
-	function getImageUrls( titles, width ) {
-		const todo = Array.from( new Set( titles ) ).filter( ( t ) => !urlCache.has( width + '|' + t ) );
+	function getImages( titles ) {
+		const todo = Array.from( new Set( titles ) ).filter( ( t ) => !imageCache.has( t ) );
 		for ( let i = 0; i < todo.length; i += 50 ) {
 			const batch = todo.slice( i, i + 50 );
 			const request = Promise.resolve( api.get( {
 				action: 'query',
 				prop: 'imageinfo',
 				iiprop: 'url',
-				iiurlwidth: width,
+				iiurlwidth: THUMB_WIDTH,
 				titles: batch,
 				redirects: true,
 				formatversion: 2,
 				maxage: 86400,
 				smaxage: 86400
-			} ) ).then( ( data ) => urlsFromResponse( data, batch ), ( code ) => {
+			} ) ).then( ( data ) => imagesFromResponse( data, batch ), ( code ) => {
 				mw.log.warn( 'GalleryBackgrounds: image lookup failed: ' + code );
 				return {};
 			} );
 			batch.forEach( ( t ) => {
-				urlCache.set( width + '|' + t, request.then( ( urls ) => urls[ t ] || null ) );
+				imageCache.set( t, request.then( ( images ) => images[ t ] || null ) );
 			} );
 		}
-		return Promise.all( titles.map( ( t ) => urlCache.get( width + '|' + t ) ) );
+		return Promise.all( titles.map( ( t ) => imageCache.get( t ) ) );
 	}
 
 	/**
-	 * @param {HTMLElement} gallery
+	 * @param {HTMLElement} box li.gallerybox
 	 * @param {string} url Thumbnail-sized background
 	 */
-	function decorateGallery( gallery, url ) {
-		gallery.classList.add( 'gallery-bg' );
-		gallery.style.setProperty( '--gallery-bg-image', cssUrl( url ) );
-		gallery.querySelectorAll( '.gallerybox > .thumb' ).forEach( ( thumb ) => {
-			if ( !thumb.querySelector( ':scope > .gallery-bg-thumb' ) ) {
-				const layer = document.createElement( 'span' );
-				// mw-no-invert keeps the picture's colours under the DarkMode extension's inverted page
-				layer.className = 'gallery-bg-thumb mw-no-invert';
-				thumb.insertBefore( layer, thumb.firstChild );
-			}
-		} );
-		// Hook into the viewer before a click on this gallery opens it
-		gallery.addEventListener( 'pointerover', patchViewer, { once: true } );
-		gallery.addEventListener( 'focusin', patchViewer, { once: true } );
+	function decorateBox( box, url ) {
+		const thumb = box.querySelector( ':scope > .thumb' );
+		if ( !thumb ) {
+			return;
+		}
+		box.classList.add( 'gallery-bg' );
+		box.style.setProperty( '--gallery-bg-image', cssUrl( url ) );
+		if ( !thumb.querySelector( ':scope > .gallery-bg-thumb' ) ) {
+			const layer = document.createElement( 'span' );
+			// mw-no-invert keeps the picture's colours under the DarkMode extension's inverted page
+			layer.className = 'gallery-bg-thumb mw-no-invert';
+			thumb.insertBefore( layer, thumb.firstChild );
+		}
+		// Hook into the viewer before a click on this image opens it
+		box.addEventListener( 'pointerover', patchViewer, { once: true } );
+		box.addEventListener( 'focusin', patchViewer, { once: true } );
 	}
 
 	/**
 	 * @param {jQuery} $content
 	 */
 	function decorateGalleries( $content ) {
-		const galleries = [];
-		$content.find( 'ul.gallery' ).each( ( i, gallery ) => {
-			const title = getBgTitle( gallery );
+		const boxes = [];
+		$content.find( 'ul.gallery > li.gallerybox' ).each( ( i, box ) => {
+			const title = getBgTitle( box );
 			if ( title ) {
-				galleries.push( { gallery, title } );
-				pageTitles.add( title );
+				boxes.push( { box, title } );
 			}
 		} );
-		if ( galleries.length ) {
-			getImageUrls( galleries.map( ( g ) => g.title ), THUMB_WIDTH ).then( ( urls ) => {
-				galleries.forEach( ( g, i ) => {
-					if ( urls[ i ] ) {
-						decorateGallery( g.gallery, urls[ i ] );
+		if ( boxes.length ) {
+			getImages( boxes.map( ( b ) => b.title ) ).then( ( images ) => {
+				boxes.forEach( ( b, i ) => {
+					if ( images[ i ] ) {
+						decorateBox( b.box, images[ i ].thumb );
 					}
 				} );
 			} );
@@ -240,7 +241,7 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 			const url = viewer.url;
 			ui.layerUrl = url;
 			ui.layer.classList.remove( 'gallery-bg-loaded' );
-			ui.layer.style.backgroundImage = cssUrl( url );
+			ui.layer.style.setProperty( '--gallery-bg-image', cssUrl( url ) );
 			// Fade in once loaded rather than painting a half-loaded picture
 			const img = new Image();
 			img.onload = () => {
@@ -268,11 +269,10 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 			viewer.title = title;
 			viewer.url = null;
 			if ( title ) {
-				pageTitles.add( title );
-				const titles = Array.from( pageTitles );
-				getImageUrls( titles, VIEWER_WIDTH ).then( ( urls ) => {
+				// Already looked up for the gallery, unless the image is outside one
+				getImages( [ title ] ).then( ( images ) => {
 					if ( viewer.title === title ) {
-						viewer.url = urls[ titles.indexOf( title ) ];
+						viewer.url = images[ 0 ] && images[ 0 ].full;
 						renderViewer();
 					}
 				} );
@@ -282,21 +282,17 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 	}
 
 	/**
-	 * Media Viewer only reports an image once it and its details have loaded
-	 * (the mmv-metadata event). To switch backgrounds as soon as an image is
-	 * opened, also hook the method that opens it.
+	 * Hook Media Viewer:
+	 * - The method that opens an image, to switch backgrounds as soon as an image is opened.
+	 *   Media Viewer only reports an image once it and its details have loaded (mmv-metadata).
+	 * - The method that sizes images for the canvas, to keep sprites off its edges.
+	 *
+	 * @param {Object} mmv Exports of the mmv module
 	 */
-	function patchViewer() {
-		if ( viewerPatched || !mw.loader.getState( 'mmv' ) || !document.querySelector( '[data-bg]' ) ) {
-			return;
-		}
-		viewerPatched = true;
-		mw.loader.using( 'mmv' ).then( ( require ) => {
-			const MultimediaViewer = require( 'mmv' ).MultimediaViewer;
-			const loadImage = MultimediaViewer && MultimediaViewer.prototype.loadImage;
-			if ( typeof loadImage !== 'function' ) {
-				return;
-			}
+	function patchModule( mmv ) {
+		const MultimediaViewer = mmv.MultimediaViewer;
+		const loadImage = MultimediaViewer && MultimediaViewer.prototype.loadImage;
+		if ( typeof loadImage === 'function' ) {
 			MultimediaViewer.prototype.loadImage = function ( image ) {
 				const result = loadImage.apply( this, arguments );
 				try {
@@ -306,12 +302,50 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 				}
 				return result;
 			};
-		} );
+		}
+
+		const Canvas = mmv.Canvas;
+		const getWidths = Canvas && Canvas.prototype.getLightboxImageWidths;
+		if ( typeof getWidths === 'function' ) {
+			Canvas.prototype.getLightboxImageWidths = function ( image ) {
+				const calculator = this.thumbnailWidthCalculator;
+				if ( !isSprite( image ) || !calculator || typeof this.getDimensions !== 'function' ) {
+					return getWidths.apply( this, arguments );
+				}
+				// As Media Viewer's own, but fitting the image inside the margin
+				const canvas = this.getDimensions();
+				return calculator.calculateWidths(
+					Math.max( 1, canvas.width - 2 * SPRITE_MARGIN ),
+					Math.max( 1, canvas.height - 2 * SPRITE_MARGIN ),
+					image.originalWidth || image.thumbnail.width,
+					image.originalHeight || image.thumbnail.height
+				);
+			};
+		}
+	}
+
+	function patchViewer() {
+		if ( viewerPatched || !mw.loader.getState( 'mmv' ) || !document.querySelector( '[data-bg], ul.gallery.spritegallery' ) ) {
+			return;
+		}
+		viewerPatched = true;
+		if ( mw.loader.getState( 'mmv' ) === 'ready' ) {
+			// Right away when the viewer is opening (mmv-setup-overlay), so the image
+			// it is opening is sized with the patch too
+			patchModule( require( 'mmv' ) );
+		} else {
+			mw.loader.using( 'mmv' ).then( ( req ) => patchModule( req( 'mmv' ) ) );
+		}
 	}
 
 	mw.hook( 'wikipage.content' ).add( decorateGalleries );
 	$( document )
 		.on( 'mmv-setup-overlay', patchViewer )
-		.on( 'mmv-metadata', ( e ) => showInViewer( e.image ) )
+		.on( 'mmv-metadata', ( e ) => {
+			// Media Viewer also reports images whose details arrive after another was opened
+			if ( !e.viewer || ( e.viewer.isOpen && e.viewer.currentImage === e.image ) ) {
+				showInViewer( e.image );
+			}
+		} )
 		.on( 'mmv-cleanup-overlay', () => showInViewer( null ) );
 } );

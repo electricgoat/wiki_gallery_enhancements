@@ -1,6 +1,6 @@
 # Gallery enhancements
 
-Gadgets that extend MediaWiki galleries on [Blue Archive Wiki](https://bluearchive.wiki).
+Gadgets that extend MediaWiki galleries and Media Viewer on [Blue Archive Wiki](https://bluearchive.wiki).
 
 ## Gallery backgrounds
 
@@ -10,25 +10,33 @@ Shows sprites against the background they are meant to be seen on:
 
 - Gallery thumbnails get a faint (20% opacity) copy of the background behind them.
 - Media Viewer gets a **Background** toggle, left of **More details**, that puts the full background behind the image. It is off until a reader turns it on, and the choice is remembered in the browser. The toggle only appears for images that have a background.
+- While the mouse is over the image, the viewer background blurs with a slow (0.8s) transition, which brings the sprite forward. This is plain CSS and only applies on devices with a mouse.
+- Sprites keep an 8px margin from the edges of the viewer, where other images fill it. An image counts as a sprite if it has a background, or if its gallery has the `spritegallery` class. The margin applies whether or not the background is showing, so the sprite doesn't change size when you toggle it.
 
 ### Wikitext
 
-Name the background file in a `data-bg` attribute on the gallery:
+`data-bg` holds a file name. Put it on the gallery to give every image in it a background:
 
 ```wikitext
-<gallery data-bg="BG_GehennaCampus_Night.jpg">
-Kayoko_(New_Year)_00.png
-Kayoko_(New_Year)_01.png
+<gallery data-bg="BG_Gehenna_Collection.png">
+Erika_00.png
+Erika_01.png
 </gallery>
 ```
 
+For a single image, put it on the image's `li.gallerybox`. It overrides the gallery's background, and an empty `data-bg=""` removes it for that image:
+
+```html
+<li class="gallerybox" style="width: 155px" data-bg="BG Gehenna Collection.png">
+```
+
+`<gallery>` lines can't set attributes on their `li`: `File.png|data-bg=…` becomes a caption. So per-image backgrounds need a template that builds the gallery markup itself, like `{{SpriteGallery}}` on [Erika](https://bluearchive.wiki/wiki/Erika#Sprites). [Erika/gallery](https://bluearchive.wiki/wiki/Erika/gallery) shows the gallery-level form.
+
 - The `File:` prefix is optional, and spaces or underscores both work. File redirects are followed.
-- `data-bg` can also go on any element around the gallery. It then applies to every gallery inside it. It also covers standalone images inside it, but only in the viewer.
-- Full upload URLs work too, so `<div data-bg="{{filepath:BG_GehennaCampus_Night.jpg}}">` wrappers keep working.
+- Use the 1024×768 collection backgrounds (`BG_…_Collection.png`). The viewer shows the original file, and some `BG_` scene files are as large as 6150px / 3.6 MB.
+- To give a sprite gallery without a background the margin, add the class: `<gallery class="spritegallery">`. A template that builds the markup itself can put it on the `ul.gallery`.
 
-**Why a file name rather than `{{filepath:}}`.** MediaWiki never expands templates or parser functions in extension-tag attributes, so `<gallery data-bg="{{filepath:X}}">` passes on the literal text. `data-*` attributes do survive onto the rendered `<ul class="gallery">`, so the gadget reads the file name and looks up the URLs with one batched `prop=imageinfo` request. That gives a 320px thumbnail for the gallery and a 1920px version for the viewer (or the original, if smaller). Some `BG_` originals are as large as 6150px / 3.6 MB.
-
-The alternative is `{{#tag:gallery|…|data-bg={{filepath:X}}}}`, which does expand the attribute but forces every `|` in the gallery lines to be written as `{{!}}`.
+The gadget looks up every background on the page in one API request, which returns a 320px version for the gallery thumbnails and the original for the viewer. The attribute takes a file name rather than `{{filepath:}}` because MediaWiki doesn't expand templates in `<gallery>` attributes.
 
 ### Installing
 
@@ -55,15 +63,58 @@ The script loads its own dependencies, so it works the same both ways.
 At the top of the JS:
 
 - `VIEWER_DEFAULT` turns the viewer background on by default for readers who have not used the toggle yet.
-- `THUMB_WIDTH` and `VIEWER_WIDTH` set the background sizes requested from the API.
+- `THUMB_WIDTH` sets the size of the thumbnail backgrounds.
+- `SPRITE_MARGIN` sets the space around sprites in the viewer, in pixels.
 - `MSG` holds the button label and tooltips.
 
-In the CSS, the thumbnail opacity is on `.gallery-bg-thumb`.
+In the CSS:
+
+- The thumbnail opacity is on `.gallery-bg-thumb`.
+- The blur radius is `--gallery-bg-blur` on `.gallery-bg-viewer`.
+- The blur's transition time is on `.gallery-bg-viewer::before`.
 
 ### Media Viewer internals it relies on
 
-- The `mmv-metadata`, `mmv-setup-overlay` and `mmv-cleanup-overlay` document events.
-- A wrapper around `MultimediaViewer.prototype.loadImage`, so the background changes as soon as an image opens rather than after its details load. It is only installed on pages that use `data-bg`. If a Media Viewer update removes the method, backgrounds still work, just a moment later.
-- The `.mw-mmv-image-wrapper` and `.mw-mmv-stripe-button-container` elements.
+- The `mmv-metadata`, `mmv-setup-overlay` and `mmv-cleanup-overlay` document events. `mmv-metadata` also fires for an image whose details arrive after another image was opened, so the gadget only acts on it for the viewer's current image.
+- A wrapper around `MultimediaViewer.prototype.loadImage`, so the background changes as soon as an image opens rather than after its details load. If a Media Viewer update removes the method, backgrounds still work, just a moment later.
+- A wrapper around `Canvas.prototype.getLightboxImageWidths`, the one place Media Viewer sizes images for its canvas. For sprites, it fits the image to a canvas `SPRITE_MARGIN` smaller on each side. The placeholder, the final image, preloading, window resizes and fullscreen all go through it, so they stay consistent.
+- Both wrappers are only installed on pages with `data-bg` or a `spritegallery`. They go in when the viewer opens, before it sizes the first image.
+- The `.mw-mmv-image-wrapper` and `.mw-mmv-stripe-button-container` elements. The blur is a `:has( .mw-mmv-image img:hover )` rule on the image wrapper.
 
 Background layers carry `mw-no-invert`, so the DarkMode extension's inverted page shows them in their real colours. The toggle is styled to match **More details** in Vector, Vector 2022 and Citizen.
+
+## Media Viewer paging
+
+[gadgets/MediaViewerPaging.js](gadgets/MediaViewerPaging.js) and [gadgets/MediaViewerPaging.css](gadgets/MediaViewerPaging.css)
+
+Removes the flicker when paging through images in Media Viewer, and preloads the previous image as well as the next.
+
+When you page, Media Viewer shows the page's gallery thumbnail at its own small size (about 50×120 for a sprite) for a frame or more before the real image appears. This happens even when the image was preloaded. Three things cause it:
+
+- `loadImage` hides the placeholder with `.hide().removeAttr( 'style' )`, and the second call undoes the first.
+- It only sizes the placeholder while its `realThumbnailShown` flag is false, but it checks the flag before resetting it for the new image. After the first image, placeholders therefore stay at thumbnail size.
+- A preloaded image still reaches the screen through an asynchronous promise, so the placeholder gets painted first.
+
+The gadget works around all three:
+
+- An image Media Viewer has already loaded is shown straight away, with no placeholder.
+- Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden.
+- The previous image and its details are preloaded. Media Viewer itself only preloads the next one.
+
+### Installing
+
+Copy the files to `MediaWiki:Gadget-MediaViewerPaging.js` and `.css`, and add:
+
+```
+* MediaViewerPaging[ResourceLoader|default|hidden]|MediaViewerPaging.js|MediaViewerPaging.css
+```
+
+It works on every page that uses Media Viewer and doesn't depend on Gallery backgrounds. Both gadgets wrap the same Media Viewer method and work together in either load order.
+
+### Media Viewer internals it relies on
+
+- A wrapper around `MultimediaViewer.prototype.loadImage`, installed when the viewer first opens (`mmv-setup-overlay`).
+- The viewer's `thumbnailInfoProvider` and `imageProvider` caches, plus its `setImage`, `displayPlaceholderThumbnail`, `fetchThumbnail`, `fetchSizeIndependentLightboxInfo` and `ui.canvas`.
+- The `mmv-metadata` event for preloading.
+
+Every step is guarded. If an update changes these, the gadget stops acting and the viewer works as it does without it. The two placeholder bugs are worth reporting upstream on Phabricator (MultimediaViewer), so the gadget can eventually be retired.

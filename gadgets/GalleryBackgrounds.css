@@ -2,8 +2,8 @@
  * Gallery backgrounds, see GalleryBackgrounds.js
  */
 
-/* Faint background behind gallery thumbnails */
-.gallery-bg .gallerybox > .thumb {
+/* Faint background behind gallery thumbnails (--gallery-bg-image is set on each box) */
+.gallerybox.gallery-bg > .thumb {
 	position: relative;
 	/* Own stacking context: the layer goes under the image but over the box's own background */
 	isolation: isolate;
@@ -24,6 +24,8 @@
 
 /* Media Viewer: background behind the full-size image */
 .gallery-bg-viewer {
+	/* How much the background blurs while the mouse is over the image */
+	--gallery-bg-blur: 8px;
 	display: none;
 	position: absolute;
 	top: 0;
@@ -32,7 +34,8 @@
 	left: 0;
 	/* .mw-mmv-image-wrapper is position: fixed, so this stays inside it, under the image */
 	z-index: -1;
-	background: center / cover no-repeat;
+	/* Clips the oversized picture below */
+	overflow: hidden;
 	opacity: 0;
 	transition: opacity 0.2s;
 	pointer-events: none;
@@ -44,6 +47,26 @@
 
 .gallery-bg-viewer.gallery-bg-loaded {
 	opacity: 1;
+}
+
+/* The picture, oversized so blurring doesn't fade its edges into the black behind it.
+   (A pseudo-element, so the blur doesn't replace DarkMode's mw-no-invert filter on the layer.) */
+.gallery-bg-viewer::before {
+	content: '';
+	position: absolute;
+	top: calc( var( --gallery-bg-blur ) * -3 );
+	right: calc( var( --gallery-bg-blur ) * -3 );
+	bottom: calc( var( --gallery-bg-blur ) * -3 );
+	left: calc( var( --gallery-bg-blur ) * -3 );
+	background: var( --gallery-bg-image ) center / cover no-repeat;
+	transition: filter 0.8s ease;
+	will-change: filter;
+}
+
+@media ( hover: hover ) {
+	.mw-mmv-image-wrapper:has( .mw-mmv-image img:hover ) .gallery-bg-viewer::before {
+		filter: blur( var( --gallery-bg-blur ) );
+	}
 }
 
 /* Show the background through transparent areas instead of the checkerboard */
@@ -103,7 +126,8 @@
 }
 
 @media ( prefers-reduced-motion: reduce ) {
-	.gallery-bg-viewer {
+	.gallery-bg-viewer,
+	.gallery-bg-viewer::before {
 		transition: none;
 	}
 }
