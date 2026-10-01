@@ -82,8 +82,9 @@ html body.mw-mmv-lightbox-open,
 	bottom: calc( var( --gallery-bg-blur ) * -3 );
 	left: calc( var( --gallery-bg-blur ) * -3 );
 	background: var( --gallery-bg-image ) center / cover no-repeat;
+	/* No will-change: browsers promote it only while the blur animates, instead of holding
+	   a full-window GPU layer (~4.6 MB at 1x, ~18 MB at 2x) while the background shows */
 	transition: filter 0.8s ease;
-	will-change: filter;
 }
 
 @media ( hover: hover ) {

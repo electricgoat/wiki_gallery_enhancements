@@ -107,7 +107,7 @@ The gadget works around all three:
 
 - An image Media Viewer has already loaded is shown straight away, with no placeholder.
 - Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden.
-- The previous image and its details are preloaded. Media Viewer itself only preloads the next one.
+- The previous image and its details are preloaded. Media Viewer itself only preloads the next one. This costs one extra sprite per viewer session, up to ~0.7 MB at the 800px size Media Viewer uses. It is skipped when the reader's browser asks to save data (Save-Data).
 
 ### Installing
 

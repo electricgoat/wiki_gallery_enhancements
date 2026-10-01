@@ -77,6 +77,10 @@
 		if ( !thumbs || thumbs.length < 2 || viewer.currentImage !== image || typeof viewer.fetchThumbnail !== 'function' ) {
 			return;
 		}
+		// Speculative downloads (a sprite can be ~0.7 MB): skip when the reader asked to save data
+		if ( navigator.connection && navigator.connection.saveData ) {
+			return;
+		}
 		[ -1, 1 ].forEach( ( step ) => {
 			const neighbour = thumbs[ ( image.index + step + thumbs.length ) % thumbs.length ];
 			viewer.fetchThumbnail( neighbour, viewer.ui.canvas.getLightboxImageWidths( neighbour ).real );
