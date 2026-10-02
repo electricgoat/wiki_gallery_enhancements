@@ -1,13 +1,13 @@
 /**
  * Media Viewer paging
+ * https://github.com/electricgoat/wiki_gallery_enhancements
  *
  * Smoother paging through images in Media Viewer:
  *
  * - An image that has already been loaded is shown straight away. Media Viewer hands it
- *   over through an asynchronous promise, so it otherwise shows a placeholder for a frame.
+ *   over through an asynchronous promise, so a placeholder flickers for a frame.
  * - While an image is still loading, its placeholder is shown at full size, as Media Viewer
- *   intends. When paging, a bug leaves it at the page thumbnail's small size, so the image
- *   seems to shrink and grow again (see also MediaViewerPaging.css).
+ *   intended. The brief small image seems to be a bug in MW (see also MediaViewerPaging.css).
  * - The previous image is preloaded along with the next one, which Media Viewer already does.
  */
 ( function () {

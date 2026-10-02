@@ -1,5 +1,6 @@
 /**
  * Gallery backgrounds, see GalleryBackgrounds.js
+ * https://github.com/electricgoat/wiki_gallery_enhancements
  */
 
 /* Faint background behind gallery thumbnails (--gallery-bg-image is set on each box) */
@@ -72,7 +73,7 @@ html body.mw-mmv-lightbox-open,
 	opacity: 1;
 }
 
-/* The picture, oversized so blurring doesn't fade its edges into the black behind it.
+/* The picture is oversized so blurring doesn't fade its edges into the black behind it.
    (A pseudo-element, so the blur doesn't replace DarkMode's mw-no-invert filter on the layer.) */
 .gallery-bg-viewer::before {
 	content: '';
@@ -82,8 +83,6 @@ html body.mw-mmv-lightbox-open,
 	bottom: calc( var( --gallery-bg-blur ) * -3 );
 	left: calc( var( --gallery-bg-blur ) * -3 );
 	background: var( --gallery-bg-image ) center / cover no-repeat;
-	/* No will-change: browsers promote it only while the blur animates, instead of holding
-	   a full-window GPU layer (~4.6 MB at 1x, ~18 MB at 2x) while the background shows */
 	transition: filter 0.8s ease;
 }
 

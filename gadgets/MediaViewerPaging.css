@@ -1,9 +1,0 @@
-/**
- * Media Viewer paging, see MediaViewerPaging.js
- *
- * Media Viewer un-hides its placeholder by accident (.hide().removeAttr( 'style' )), so the page's
- * small thumbnail can show at its own size for a moment. Only show placeholders it has sized.
- */
-.mw-mmv-image img.mw-mmv-placeholder-image:not( [style] ) {
-	visibility: hidden;
-}

@@ -1,12 +1,47 @@
 # Gallery enhancements
 
-Gadgets that extend MediaWiki galleries and Media Viewer on [Blue Archive Wiki](https://bluearchive.wiki).
+A gadget that extends MediaWiki galleries and Media Viewer on [Blue Archive Wiki](https://bluearchive.wiki). It is made of two independent scripts, each with its own stylesheet: [Gallery backgrounds](#gallery-backgrounds) and [Media Viewer paging](#media-viewer-paging).
 
-They work wherever Media Viewer does, in every skin including Minerva used as a desktop skin. MobileFrontend's mobile view has its own image viewer, which isn't supported, because MobileFrontend is to be removed after the move to Citizen. In mobile view, only the gallery thumbnail backgrounds appear.
+It works wherever Media Viewer does, in every skin including Minerva used as a desktop skin. MobileFrontend's mobile view has its own image viewer, which isn't supported, because MobileFrontend is to be removed after the move to Citizen. In mobile view, only the gallery thumbnail backgrounds appear.
+
+## Installing
+
+1. Copy the four gadget files in this repo to the wiki:
+   - `MediaWiki:Gadget-GalleryBackgrounds.js`
+   - `MediaWiki:Gadget-GalleryBackgrounds.css`
+   - `MediaWiki:Gadget-MediaViewerPaging.js`
+   - `MediaWiki:Gadget-MediaViewerPaging.css`
+2. Add this line to `MediaWiki:Gadgets-definition`:
+
+   ```
+   * GalleryEnhancements[ResourceLoader|default|type=general|dependencies=mediawiki.api,mediawiki.Title,mediawiki.storage]|GalleryBackgrounds.js|MediaViewerPaging.js|GalleryBackgrounds.css|MediaViewerPaging.css
+   ```
+
+3. Create `MediaWiki:Gadget-GalleryEnhancements` with the description shown in Special:Preferences:
+
+   ```wikitext
+   '''Gallery enhancements:''' Shows student sprites against their collection backgrounds, in galleries and in the full-window image viewer (switch it on with the Background button there), and makes paging between images in the viewer smoother.
+   ```
+
+Notes on the definition:
+
+- `type=general` keeps the styles out of the page's render-blocking CSS: they load with the script, after the page has rendered. Don't split them into a `type=styles` gadget. Nothing they style exists before the script runs.
+- `default` turns it on for everyone and lists it in Preferences, where a user can turn it off. Add `hidden` to make it always on; the description is then not shown.
+- The three dependencies are already loaded on every page of the wiki, so they add no downloads.
+- MediaWiki joins both scripts into one module. Neither declares anything at the top level, so they don't collide, and their order doesn't matter.
+
+To try changes before deploying, put the files in your user space and load them from `Special:MyPage/common.js`. The scripts load what they need themselves, so they behave the same way:
+
+```js
+[ 'GalleryBackgrounds', 'MediaViewerPaging' ].forEach( ( name ) => {
+	mw.loader.load( '/wiki/User:Electricsheep/' + name + '.js?action=raw&ctype=text/javascript' );
+	mw.loader.load( '/wiki/User:Electricsheep/' + name + '.css?action=raw&ctype=text/css', 'text/css' );
+} );
+```
 
 ## Gallery backgrounds
 
-[gadgets/GalleryBackgrounds.js](gadgets/GalleryBackgrounds.js) and [gadgets/GalleryBackgrounds.css](gadgets/GalleryBackgrounds.css)
+[GalleryBackgrounds.js](GalleryBackgrounds.js) and [GalleryBackgrounds.css](GalleryBackgrounds.css)
 
 Shows sprites against the background they are meant to be seen on:
 
@@ -44,26 +79,6 @@ For a single image, put it on the image's `li.gallerybox`. It overrides the gall
 
 The gadget looks up every background on the page in one API request, which returns a 320px version for the gallery thumbnails and the original for the viewer. The attribute takes a file name rather than `{{filepath:}}` because MediaWiki doesn't expand templates in `<gallery>` attributes.
 
-### Installing
-
-1. Copy the two files to `MediaWiki:Gadget-GalleryBackgrounds.js` and `MediaWiki:Gadget-GalleryBackgrounds.css`.
-2. Add this line to `MediaWiki:Gadgets-definition`:
-
-   ```
-   * GalleryBackgrounds[ResourceLoader|default|hidden|dependencies=mediawiki.api,mediawiki.Title,mediawiki.storage]|GalleryBackgrounds.js|GalleryBackgrounds.css
-   ```
-
-   Drop `hidden` to let users turn it off in Special:Preferences.
-
-To try it before deploying, put the files in your user space and load them from `Special:MyPage/common.js`:
-
-```js
-mw.loader.load( '/wiki/User:Electricsheep/GalleryBackgrounds.js?action=raw&ctype=text/javascript' );
-mw.loader.load( '/wiki/User:Electricsheep/GalleryBackgrounds.css?action=raw&ctype=text/css', 'text/css' );
-```
-
-The script loads its own dependencies, so it works the same both ways.
-
 ### Settings
 
 At the top of the JS:
@@ -93,7 +108,7 @@ Background layers carry `mw-no-invert`, so the DarkMode extension's inverted pag
 
 ## Media Viewer paging
 
-[gadgets/MediaViewerPaging.js](gadgets/MediaViewerPaging.js) and [gadgets/MediaViewerPaging.css](gadgets/MediaViewerPaging.css)
+[MediaViewerPaging.js](MediaViewerPaging.js) and [MediaViewerPaging.css](MediaViewerPaging.css)
 
 Removes the flicker when paging through images in Media Viewer, and preloads the previous image as well as the next.
 
@@ -109,15 +124,7 @@ The gadget works around all three:
 - Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden.
 - The previous image and its details are preloaded. Media Viewer itself only preloads the next one. This costs one extra sprite per viewer session, up to ~0.7 MB at the 800px size Media Viewer uses. It is skipped when the reader's browser asks to save data (Save-Data).
 
-### Installing
-
-Copy the files to `MediaWiki:Gadget-MediaViewerPaging.js` and `.css`, and add:
-
-```
-* MediaViewerPaging[ResourceLoader|default|hidden]|MediaViewerPaging.js|MediaViewerPaging.css
-```
-
-It works on every page that uses Media Viewer and doesn't depend on Gallery backgrounds. Both gadgets wrap the same Media Viewer method and work together in either load order.
+It applies to every image in Media Viewer, on any page, and doesn't depend on the backgrounds script.
 
 ### Media Viewer internals it relies on
 

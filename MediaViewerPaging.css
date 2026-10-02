@@ -1,0 +1,10 @@
+/**
+ * Media Viewer paging, see MediaViewerPaging.js
+ * https://github.com/electricgoat/wiki_gallery_enhancements
+ *
+ * Media Viewer un-hides its placeholder (.hide().removeAttr( 'style' )), so the page's
+ * small thumbnail can show at its own size for a moment. Only show placeholders when they have been sized.
+ */
+.mw-mmv-image img.mw-mmv-placeholder-image:not( [style] ) {
+	visibility: hidden;
+}

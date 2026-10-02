@@ -1,7 +1,8 @@
 /**
  * Gallery backgrounds
+ * https://github.com/electricgoat/wiki_gallery_enhancements
  *
- * Shows sprites against the background they are meant to be seen on:
+ * Shows playable student sprites against their collection backgrounds:
  *
  *   <gallery data-bg="BG Gehenna Collection.png">
  *   Kayoko_(New_Year)_00.png
@@ -14,19 +15,19 @@
  *   The background blurs while the mouse is over the image (GalleryBackgrounds.css).
  *
  * data-bg holds a file name ("File:" optional). A data-bg on one of the gallery's
- * li.gallerybox items overrides the gallery's for that image; an empty one removes it.
+ * li.gallerybox items overrides the gallery's for that image; an empty one removes any inherited bg.
  *
  * Sprites (images with a background, or in a gallery with the "spritegallery" class) keep
  * a small margin from the edges of the viewer, where other images fill it. They all get
  * the toggle: sprites without a background image toggle Media Viewer's transparency
- * checkerboard instead.
+ * checkerboard underlay instead.
  */
 mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).then( ( require ) => {
 	'use strict';
 
 	// Gallery thumbnails get a scaled-down background; the viewer uses the original
 	const THUMB_WIDTH = 320;
-	// Space kept between a sprite and the edges of the viewer, in pixels
+	// Space kept between a sprite and the edges of the viewer, in px
 	const SPRITE_MARGIN = 8;
 	// Whether the viewer shows backgrounds for readers who have not used the toggle yet
 	const VIEWER_DEFAULT = false;
