@@ -87,6 +87,7 @@ At the top of the JS:
 - `THUMB_WIDTH` sets the size of the thumbnail backgrounds.
 - `SPRITE_MARGIN` sets the space around sprites in the viewer, in pixels.
 - `MSG` holds the button label and tooltips.
+- Sprites can load their original file in the viewer, instead of the copy Media Viewer resizes to fit the window. It is commented out for now, in the `getLightboxImageWidths` wrapper. Resized copies pay off for large photos, but sprite PNGs are compressed well enough that they save little: Hina (Swimsuit)'s 1024px copy is as large as the original, and Erika's 800px copy is larger than the original. The cost is with wide sprites in smaller windows: Hina's sprites would take 1.7 MB where Media Viewer loads 0.7 MB at 1366×900. Originals also never hit the [resized copies that fail to load](#resized-copies-that-fail-to-load), but the paging script fixes those for every image now.
 
 In the CSS:
 
@@ -110,7 +111,7 @@ Background layers carry `mw-no-invert`, so the DarkMode extension's inverted pag
 
 [MediaViewerPaging.js](MediaViewerPaging.js) and [MediaViewerPaging.css](MediaViewerPaging.css)
 
-Removes the flicker when paging through images in Media Viewer, and preloads the previous image as well as the next.
+Removes the flicker when paging through images in Media Viewer, preloads the previous image as well as the next, and disables CORS in image requests to work around thumb generation issue.
 
 When you page, Media Viewer shows the page's gallery thumbnail at its own small size (about 50×120 for a sprite) for a frame or more before the real image appears. This happens even when the image was preloaded. Three things cause it:
 
@@ -122,13 +123,22 @@ The gadget works around all three:
 
 - An image Media Viewer has already loaded is shown straight away, with no placeholder.
 - Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden, so for those the canvas is empty until the real image arrives.
-- The previous image and its details are preloaded. Media Viewer itself only preloads the next one. This costs one extra sprite per viewer session, up to ~0.7 MB at the 800px size Media Viewer uses. It is skipped when the reader's browser asks to save data (Save-Data).
+- The previous image and its details are preloaded. Media Viewer itself only preloads the next one. This costs one extra image per viewer session, up to about 1.6 MB for a sprite at the sizes Media Viewer loads. It is skipped when the reader's browser asks to save data (Save-Data).
 
 It applies to every image in Media Viewer, on any page, and doesn't depend on the backgrounds script.
+
+### Resized copies that fail to load
+
+Media Viewer loads a copy of each image resized to fit the window. When that copy hasn't been made yet, `static.wikitide.net` redirects the request to the wiki's `thumb_handler.php`, which makes it. That response has no `Access-Control-Allow-Origin` header. Media Viewer loads images as CORS requests, so the browser blocks it, and Media Viewer shows "Sorry, the file cannot be displayed". Large windows hit it most, because they need the 1024px and wider copies, which mostly don't exist yet. Once a copy has been stored it loads normally, but the redirect stays cached for a few minutes.
+
+The gadget makes Media Viewer load images without CORS, like every other image on the page. CORS would only let scripts read an image's pixels, and nothing in Media Viewer does; it asks for it because of an XHR preloader that has since been removed. Without CORS the browser sends cookies with the request, but only to the servers that already get them for the page itself.
+
+The proper fix is on the server: `thumb_handler.php` responses should send `Access-Control-Allow-Origin: *`, as `static.wikitide.net` already does. That would also cover readers who turn the gadget off.
 
 ### Media Viewer internals it relies on
 
 - A wrapper around `MultimediaViewer.prototype.loadImage`, installed when the viewer first opens (`mmv-setup-overlay`).
+- `ImageProvider.prototype.imagePreloadingSupported`, which Media Viewer now only uses to decide whether to load images with CORS. The gadget makes it return false as the viewer first opens, before the first image loads.
 - The viewer's `thumbnailInfoProvider` and `imageProvider` caches, plus its `setImage`, `displayPlaceholderThumbnail`, `fetchThumbnail`, `fetchSizeIndependentLightboxInfo` and `ui.canvas`.
 - The `mmv-metadata` event for preloading.
 - The inline width Media Viewer gives a placeholder when it sizes it. The CSS hides placeholders without a declared width.

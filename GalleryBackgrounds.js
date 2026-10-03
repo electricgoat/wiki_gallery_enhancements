@@ -18,9 +18,7 @@
  * li.gallerybox items overrides the gallery's for that image; an empty one removes any inherited bg.
  *
  * Sprites (images with a background, or in a gallery with the "spritegallery" class) keep
- * a small margin from the edges of the viewer, where other images fill it. They all get
- * the toggle: sprites without a background image toggle Media Viewer's transparency
- * checkerboard underlay instead.
+ * a small margin from the edges of the viewer, where other images fill it.
  */
 mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).then( ( require ) => {
 	'use strict';
@@ -318,12 +316,17 @@ mw.loader.using( [ 'mediawiki.api', 'mediawiki.Title', 'mediawiki.storage' ] ).t
 				}
 				// As Media Viewer's own, but fitting the image inside the margin
 				const canvas = this.getDimensions();
-				return calculator.calculateWidths(
+				const widths = calculator.calculateWidths(
 					Math.max( 1, canvas.width - 2 * SPRITE_MARGIN ),
 					Math.max( 1, canvas.height - 2 * SPRITE_MARGIN ),
 					image.originalWidth || image.thumbnail.width,
 					image.originalHeight || image.thumbnail.height
 				);
+				// Ask for the original's width: Media Viewer then loads the original file, not a resized thumb
+				// if ( image.originalWidth > widths.real ) {
+				// 	widths.real = image.originalWidth;
+				// }
+				return widths;
 			};
 		}
 	}

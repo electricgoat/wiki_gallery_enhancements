@@ -9,8 +9,11 @@
  * - While an image is still loading, its placeholder is shown at full size, as Media Viewer
  *   intended. The brief small image seems to be a bug in MW (see also MediaViewerPaging.css).
  * - The previous image is preloaded along with the next one, which Media Viewer already does.
+ * - Images load without CORS; otherwise a resized image that hasn't been made yet fails to 
+ *   load ("Sorry, the file cannot be displayed").
  */
-( function () {
+// Nothing to load: this only provides require(), to reach Media Viewer's classes as it opens
+mw.loader.using( [] ).then( ( require ) => {
 	'use strict';
 
 	let patched = false;
@@ -89,8 +92,23 @@
 	}
 
 	/**
-	 * Hook the method that opens an image. Done when the viewer first opens: that image
-	 * isn't affected (the bugs only show once an image has been displayed), later ones are.
+	 * Load images without CORS. Media Viewer requests them with crossOrigin = 'anonymous', which
+	 * only lets scripts read their pixels, and nothing currently uses that. Cache miss on a thumb
+	 * is redirected to /w/thumb_handler.php, which sends no Access-Control-Allow-Origin header,
+	 * so the browser blocks it under CORS. Without CORS, images load like all others on the page.
+	 *
+	 * @param {Function} ImageProvider Media Viewer's ImageProvider class
+	 */
+	function loadWithoutCors( ImageProvider ) {
+		// Its only use left is choosing CORS (it was for an XHR preloader that has since been removed)
+		if ( ImageProvider && typeof ImageProvider.prototype.imagePreloadingSupported === 'function' ) {
+			ImageProvider.prototype.imagePreloadingSupported = () => false;
+		}
+	}
+
+	/**
+	 * Hook Media Viewer as it first opens, before it loads that image. The loadImage hook acts from the
+	 * next image on: the paging bugs only show once an image has been displayed.
 	 */
 	function patchViewer() {
 		// The classic viewer is loaded by now; if it isn't (mobile beta viewer), leave things be
@@ -98,8 +116,11 @@
 			return;
 		}
 		patched = true;
-		mw.loader.using( 'mmv' ).then( ( require ) => {
-			const MultimediaViewer = require( 'mmv' ).MultimediaViewer;
+		// This runs inside Media Viewer's loadImage: an error here must not stop the viewer
+		try {
+			const mmv = require( 'mmv' );
+			loadWithoutCors( mmv.ImageProvider );
+			const MultimediaViewer = mmv.MultimediaViewer;
 			const loadImage = MultimediaViewer && MultimediaViewer.prototype.loadImage;
 			if ( typeof loadImage !== 'function' ) {
 				return;
@@ -115,7 +136,9 @@
 				}
 				return result;
 			};
-		} );
+		} catch ( e ) {
+			mw.log.error( e );
+		}
 	}
 
 	$( document )
@@ -128,4 +151,4 @@
 				mw.log.error( err );
 			}
 		} );
-}() );
+} );
