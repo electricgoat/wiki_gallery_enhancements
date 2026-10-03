@@ -2,9 +2,11 @@
  * Media Viewer paging, see MediaViewerPaging.js
  * https://github.com/electricgoat/wiki_gallery_enhancements
  *
- * Media Viewer un-hides its placeholder (.hide().removeAttr( 'style' )), so the page's
- * small thumbnail can show at its own size for a moment. Only show placeholders when they have been sized.
+ * Media Viewer un-hides its placeholder (.hide().removeAttr( 'style' )), so the page's small thumbnail
+ * can show at its own size. Only show placeholders when they have been sized.
+ * Sizing gives the placeholder an inline width. Test for that, not for a style attribute: Chrome leaves
+ * an empty style="" behind after .hide().removeAttr( 'style' ).
  */
-.mw-mmv-image img.mw-mmv-placeholder-image:not( [style] ) {
+.mw-mmv-image img.mw-mmv-placeholder-image:not( [style*="width"] ) {
 	visibility: hidden;
 }

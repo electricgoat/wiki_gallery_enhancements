@@ -114,14 +114,14 @@ Removes the flicker when paging through images in Media Viewer, and preloads the
 
 When you page, Media Viewer shows the page's gallery thumbnail at its own small size (about 50×120 for a sprite) for a frame or more before the real image appears. This happens even when the image was preloaded. Three things cause it:
 
-- `loadImage` hides the placeholder with `.hide().removeAttr( 'style' )`, and the second call undoes the first.
+- `loadImage` hides the placeholder with `.hide().removeAttr( 'style' )`, and the second call undoes the first. A placeholder Media Viewer then leaves unsized shows at thumbnail size. It never sizes one it would have to enlarge more than 11 times, such as a wide sprite in a large window: Hina's 120px thumbnails are shown about 1450px wide at 1920×1080. That thumbnail stays small until the real image has loaded, when the viewer opens as well as when paging.
 - It only sizes the placeholder while its `realThumbnailShown` flag is false, but it checks the flag before resetting it for the new image. After the first image, placeholders therefore stay at thumbnail size.
 - A preloaded image still reaches the screen through an asynchronous promise, so the placeholder gets painted first.
 
 The gadget works around all three:
 
 - An image Media Viewer has already loaded is shown straight away, with no placeholder.
-- Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden.
+- Otherwise the placeholder is sized as Media Viewer intends: full size, blurry until the real image arrives. Placeholders that were never sized stay hidden, so for those the canvas is empty until the real image arrives.
 - The previous image and its details are preloaded. Media Viewer itself only preloads the next one. This costs one extra sprite per viewer session, up to ~0.7 MB at the 800px size Media Viewer uses. It is skipped when the reader's browser asks to save data (Save-Data).
 
 It applies to every image in Media Viewer, on any page, and doesn't depend on the backgrounds script.
@@ -131,5 +131,6 @@ It applies to every image in Media Viewer, on any page, and doesn't depend on th
 - A wrapper around `MultimediaViewer.prototype.loadImage`, installed when the viewer first opens (`mmv-setup-overlay`).
 - The viewer's `thumbnailInfoProvider` and `imageProvider` caches, plus its `setImage`, `displayPlaceholderThumbnail`, `fetchThumbnail`, `fetchSizeIndependentLightboxInfo` and `ui.canvas`.
 - The `mmv-metadata` event for preloading.
+- The inline width Media Viewer gives a placeholder when it sizes it. The CSS hides placeholders without a declared width.
 
 Every step is guarded. If an update changes these, the gadget stops acting and the viewer works as it does without it. The two placeholder bugs are worth reporting upstream on Phabricator (MultimediaViewer), so the gadget can eventually be retired.
